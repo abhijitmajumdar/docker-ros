@@ -5,71 +5,120 @@ A wrapper around ROS commands, which launches all ROS related tools inside a con
 other dependencies other than docker
 
 Usage:
+    
+    Help:
 
-    # start rosmaster
-    docker-ros roscore
+        docker-ros
+    
+    Execution commands:
 
-    # rostopic and rosservice commands
-    docker-ros rostopic list
-    docker-ros rosservice list
+        docker-ros COMMAND
 
-    # lanuch ros GUIs
-    docker-ros rosrun rqt_reconfigure rqt_reconfigure
-    docker-ros rosrun rviz rviz
+    Special commands:
 
-    # run ros commands with rosmaster running on a remote host (replace <REMOTE_HOST> with hostname or IP address of 
-    # remote)
-    # NOTE: you need to do a 1-time-action of adding the hostname with its IP address to your /etc/hosts
-    docker-ros ROS_MASTER_URI=http://<REMOTE_HOST>:11311 rostopic list
+        docker-ros start
+        docker-ros stop
+        docker-ros add PKGA <PKGB> ...
+        docker-ros clear
+        docker-ros distro <DISTRO>
 
-    # start the docker-ros container (this is automatically done when running any other command, does not need to be
-    # called explicitly)
-    docker-ros start
-    # stop the docker-ros container, this can be done to stop and remove the container at any point
-    docker-ros stop
+Examples:
+    
+    start rosmaster:
+    
+        docker-ros roscore
 
-    # add ros package(s) to the image
-    docker-ros add ros-noetic-swri-console ros-noetic-realsense2-camera
+    rostopic and rosservice commands:
+    
+        docker-ros rostopic list
+        docker-ros rosservice list
 
-    # lanuch usb based camera driver
-    docker-ros roslaunch realsense2_camera rs_camera.launch
-    docker-ros rosrun rviz rviz
+    lanuch ros GUIs:
+    
+        docker-ros rosrun rqt_reconfigure rqt_reconfigure
+        docker-ros rosrun rviz rviz
+
+    run ros commands with rosmaster running on a remote host (replace <REMOTE_HOST> with hostname or IP address of 
+    remote). NOTE: you need to do a 1-time-action of adding the hostname with its IP address to your /etc/hosts:
+    
+        docker-ros ROS_MASTER_URI=http://<REMOTE_HOST>:11311 rostopic list
+
+    start the docker-ros container (this is automatically done when running any other command, does not need to be
+    called explicitly)
+        
+        docker-ros start
+    
+    stop the docker-ros container, this can be done to stop and remove the container at any point
+    
+        docker-ros stop
+
+    add (ros or other from apt sources) package(s) to the image
+        
+        docker-ros add ros-noetic-swri-console ros-noetic-realsense2-camera nano
+
+    lanuch usb based camera driver (connect a realsense camera over USB to system for this example)
+    
+        docker-ros add ros-noetic-realsense2-camera
+        docker-ros roslaunch realsense2_camera rs_camera.launch
+        docker-ros rosrun rviz rviz
+
+    switch ros distro between noetic, melodic or kinetic. NOTE: this clears all packages installed, you will need to
+    rerun docker-ros add <PKGS> to add them after this step
+    
+        docker-ros distro melodic
+
+    Clear all configurations
+    
+        docker-ros clear
 "
 
-ROS_DISTRO="noetic"
-BASE_IMAGE="osrf/ros:$ROS_DISTRO-desktop-full"
+DEFAULT_ROS_DISTRO="noetic"
+DEFAULT_PKGS=""
+ROS_IMAGE="docker-ros:custom"
 
-_configure(){
-    if [ -z $2 ] || [ -z $1 ]; then
-        echo "_init() needs atleast 2 arguments - image to use and space seperated package list"
-        exit 1
-    fi
-
+_configure_loc(){
     if [ ! -d ~/.config/docker_ros ]; then
         mkdir -p ~/.config/docker_ros
     fi
-
-    echo "$1" > ~/.config/docker_ros/image
-    shift
-    echo "$@" > ~/.config/docker_ros/packages
 }
 
-_read_configured_image(){
-    if [ ! -f ~/.config/docker_ros/image ]; then
-        echo $BASE_IMAGE
-        return
+_init(){
+    _configure_loc
+
+    if [ ! -f ~/.config/docker_ros/ros_distro ]; then
+        echo "$DEFAULT_ROS_DISTRO" > ~/.config/docker_ros/ros_distro
     fi
 
-    cat ~/.config/docker_ros/image
-}
-
-_read_configured_packages(){
     if [ ! -f ~/.config/docker_ros/packages ]; then
-        echo ""
-        return
+        echo "$DEFAULT_PKGS" > ~/.config/docker_ros/packages
     fi
+}
 
+_deinit(){
+    if [ -d ~/.config/docker_ros ]; then
+        rm -rf ~/.config/docker_ros
+    fi
+}
+
+_get_ros_distro(){
+    cat ~/.config/docker_ros/ros_distro
+}
+
+_get_base_image(){
+    echo "osrf/ros:$(_get_ros_distro)-desktop-full"
+}
+
+_get_packages(){
     cat ~/.config/docker_ros/packages
+}
+
+_retag_base_image(){
+    docker pull $(_get_base_image)
+    docker tag $(_get_base_image) $ROS_IMAGE
+}
+
+_ros_image_nonexistant(){
+    [ -z "$(docker images -q --filter reference=docker-ros:custom)" ]
 }
 
 _not_running(){
@@ -85,6 +134,10 @@ _start(){
         return
     fi
 
+    if _ros_image_nonexistant; then
+        _retag_base_image
+    fi
+
     echo "Starting docker-ros container"
     docker run -d \
         --name docker-ros \
@@ -93,7 +146,7 @@ _start(){
         -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
         --privileged \
         -v /dev/bus/usb:/dev/bus/usb \
-        $(_read_configured_image) \
+        $ROS_IMAGE \
         bash -c "while true; do sleep 1000; done" > /dev/null
 }
 
@@ -106,9 +159,63 @@ _stop(){
     docker rm docker-ros > /dev/null
 }
 
+_install_configured_packages(){
+    if _running; then
+        _stop
+    fi
+
+    BASE_IMAGE="$(_get_base_image)"
+    FINAL_IMAGE="$ROS_IMAGE"
+    PKGS="$(_get_packages)"
+
+    if [ -z "$PKGS" ]; then
+        return
+    fi
+
+    echo "installing following packages to $BASE_IMAGE to form $FINAL_IMAGE: $PKGS"
+    docker run \
+        --name docker-ros \
+        -e PKGS \
+        $BASE_IMAGE \
+        bash -c "apt update && apt install -y $PKGS && rm -rf /var/lib/apt/lists/*"
+    docker commit docker-ros $FINAL_IMAGE
+    docker rm docker-ros
+}
+
 _add(){
+    if _running; then
+        _stop
+    fi
+
     if [ -z $1 ]; then
         echo "must specify atleast 1 package to be added to the image"
+        exit 1
+    fi
+
+    PKGS=`echo "$(_get_packages) $@" | xargs -n1 | sort -u | xargs`
+    
+    if [ -z "$PKGS" ]; then
+        _retag_base_image
+        exit 0
+    fi
+
+    echo "$PKGS" > ~/.config/docker_ros/packages
+
+    _install_configured_packages 
+}
+
+_clear(){
+    if _running; then
+        _stop
+    fi
+
+    _deinit
+    docker rmi $ROS_IMAGE
+}
+
+_distro(){
+    if [ -z $1 ] || { [ "$1" != "noetic" ] && [ "$1" != "melodic" ] && [ "$1" != "kinetic" ]; }; then
+        echo "must specify a valid ROS distro from 'noetic', 'melodic', 'kinetic'"
         exit 1
     fi
 
@@ -116,21 +223,15 @@ _add(){
         _stop
     fi
 
-    NEW_IMAGE="docker-ros:custom"
-    PKGS=`echo "$(_read_configured_packages) $@" | xargs -n1 | sort -u | xargs`
-    echo "installing following packages: $PKGS"
-    docker run \
-        --name docker-ros \
-        -e PKGS \
-        $BASE_IMAGE \
-        bash -c "apt update && apt install -y $PKGS && rm -rf /var/lib/apt/lists/*"
-    docker commit docker-ros $NEW_IMAGE
-    docker rm docker-ros
-
-    _configure $NEW_IMAGE $PKGS
+    _deinit
+    _init
+    echo "$1" > ~/.config/docker_ros/ros_distro
+    _retag_base_image
 }
 
 _command(){
+    _init
+
     COMMAND="$@"
 
     if [ -z "$COMMAND" ]; then
@@ -149,12 +250,19 @@ _command(){
         shift
         _add $@
         exit 0
+    elif [ "$COMMAND" == "clear" ]; then
+        _clear
+        exit 0
+    elif [ "$1" == "distro" ]; then
+        _distro $2
+        exit 0
     fi
 
     # If user only passes (ros or other) commands, launch container if not already running
     _start
 
     # Execute the command in the container, with an interactive session to enable user keypresses
+    ROS_DISTRO=$(_get_ros_distro)
     xhost +local:root > /dev/null
     docker exec -it \
         -e QT_X11_NO_MITSHM=1 \
