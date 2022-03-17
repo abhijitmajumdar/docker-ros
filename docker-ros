@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+
+HELP="
+A wrapper around ROS commands, which launches all ROS related tools inside a container. You do not need to install any
+other dependencies other than docker
+
+Usage:
+
+    # start rosmaster
+    docker-ros roscore
+
+    # rostopic and rosservice commands
+    docker-ros rostopic list
+    docker-ros rosservice list
+
+    # lanuch ros GUIs
+    docker-ros rosrun rqt_reconfigure rqt_reconfigure
+    docker-ros rosrun rviz rviz
+
+    # run ros commands with rosmaster running on a remote host (replace <REMOTE_HOST> with hostname or IP address of 
+    # remote)
+    # NOTE: you need to do a 1-time-action of adding the hostname with its IP address to your /etc/hosts
+    docker-ros ROS_MASTER_URI=http://<REMOTE_HOST>:11311 rostopic list
+
+    # start the docker-ros container (this is automatically done when running any other command, does not need to be
+    # called explicitly)
+    docker-ros start
+    # stop the docker-ros container, this can be done to stop and remove the container at any point
+    docker-ros stop
+
+    # add ros package(s) to the image
+    docker-ros add ros-noetic-swri-console ros-noetic-realsense2-camera
+
+    # lanuch usb based camera driver
+    docker-ros roslaunch realsense2_camera rs_camera.launch
+    docker-ros rosrun rviz rviz
+"
+
+ROS_DISTRO="noetic"
+BASE_IMAGE="osrf/ros:$ROS_DISTRO-desktop-full"
+
+_configure(){
+    if [ -z $2 ] || [ -z $1 ]; then
+        echo "_init() needs atleast 2 arguments - image to use and space seperated package list"
+        exit 1
+    fi
+
+    if [ ! -d ~/.config/docker_ros ]; then
+        mkdir -p ~/.config/docker_ros
+    fi
+
+    echo "$1" > ~/.config/docker_ros/image
+    shift
+    echo "$@" > ~/.config/docker_ros/packages
+}
+
+_read_configured_image(){
+    if [ ! -f ~/.config/docker_ros/image ]; then
+        echo $BASE_IMAGE
+        return
+    fi
+
+    cat ~/.config/docker_ros/image
+}
+
+_read_configured_packages(){
+    if [ ! -f ~/.config/docker_ros/packages ]; then
+        echo ""
+        return
+    fi
+
+    cat ~/.config/docker_ros/packages
+}
+
+_not_running(){
+    [ -z "$(docker ps -q --filter name=docker-ros)" ]
+}
+
+_running(){
+    [ ! -z "$(docker ps -q --filter name=docker-ros)" ]
+}
+
+_start(){
+    if _running; then
+        return
+    fi
+
+    echo "Starting docker-ros container"
+    docker run -d \
+        --name docker-ros \
+        --network host \
+        --ipc host \
+        -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
+        --privileged \
+        -v /dev/bus/usb:/dev/bus/usb \
+        $(_read_configured_image) \
+        bash -c "while true; do sleep 1000; done" > /dev/null
+}
+
+_stop(){
+    if _not_running; then
+        return
+    fi
+
+    docker stop docker-ros > /dev/null
+    docker rm docker-ros > /dev/null
+}
+
+_add(){
+    if [ -z $1 ]; then
+        echo "must specify atleast 1 package to be added to the image"
+        exit 1
+    fi
+
+    if _running; then
+        _stop
+    fi
+
+    NEW_IMAGE="docker-ros:custom"
+    PKGS=`echo "$(_read_configured_packages) $@" | xargs -n1 | sort -u | xargs`
+    echo "installing following packages: $PKGS"
+    docker run \
+        --name docker-ros \
+        -e PKGS \
+        $BASE_IMAGE \
+        bash -c "apt update && apt install -y $PKGS && rm -rf /var/lib/apt/lists/*"
+    docker commit docker-ros $NEW_IMAGE
+    docker rm docker-ros
+
+    _configure $NEW_IMAGE $PKGS
+}
+
+_command(){
+    COMMAND="$@"
+
+    if [ -z "$COMMAND" ]; then
+        printf '%s' "$HELP"
+        exit 1
+    fi
+    
+    # Explicit commands
+    if [ "$COMMAND" == "start" ]; then
+        _start
+        exit 0
+    elif [ "$COMMAND" == "stop" ]; then
+        _stop
+        exit 0
+    elif [ "$#" -ge 1 ] && [ "$1" == "add" ]; then
+        shift
+        _add $@
+        exit 0
+    fi
+
+    # If user only passes (ros or other) commands, launch container if not already running
+    _start
+
+    # Execute the command in the container, with an interactive session to enable user keypresses
+    xhost +local:root > /dev/null
+    docker exec -it \
+        -e QT_X11_NO_MITSHM=1 \
+        -e DISPLAY \
+        -e ROS_DISTRO \
+        -e COMMAND \
+        docker-ros \
+        bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && $COMMAND"
+    xhost -local:root > /dev/null
+}
+
+_command "$@"
