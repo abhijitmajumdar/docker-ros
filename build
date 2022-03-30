@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+PACKAGE_NAME=docker-ros-deb
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# create (clean) a base directory
+rm -rf ${SCRIPT_DIR}/${PACKAGE_NAME}
+mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN
+
+# configure the control file
+echo -e "Package: ${PACKAGE_NAME}" > ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Version: 1.0" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Depends: docker-ce, bash-completion" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Section: custom" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Priority: optional" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Architecture: all" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Maintainer: Abhijit Majumdar" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+echo -e "Description: ROS over docker" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
+
+# place the exectuable
+mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/bin/
+cp ${SCRIPT_DIR}/docker-ros ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/bin/
+
+# place the runtime files
+mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/share/docker_ros
+cp ${SCRIPT_DIR}/get_completions ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/share/docker_ros/
+
+# place the bash completion script to appropriate location
+mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/etc/bash_completion.d/
+cp ${SCRIPT_DIR}/docker-ros-bash-completion ${SCRIPT_DIR}/${PACKAGE_NAME}/etc/bash_completion.d/
+
+# build deb
+dpkg-deb --build ${PACKAGE_NAME}
+
+# clean build
+rm -rf ${SCRIPT_DIR}/${PACKAGE_NAME}

@@ -22,6 +22,13 @@ Usage:
         docker-ros clear
         docker-ros distro <DISTRO>
 
+    Completion:
+
+        docker-ros rostopic <TAB> <TAB> <TAB>
+
+        docker-ros roscore
+        docker-ros rostopic echo <TAB> <TAB> <TAB>
+
 Examples:
     
     start rosmaster:
@@ -73,7 +80,7 @@ Examples:
 "
 
 DEFAULT_ROS_DISTRO="noetic"
-DEFAULT_PKGS=""
+DEFAULT_PKGS="bash-completion nano less"
 ROS_IMAGE="docker-ros:custom"
 
 _configure_loc(){
@@ -136,10 +143,14 @@ _start(){
 
     if _ros_image_nonexistant; then
         _retag_base_image
+        _install_configured_packages
     fi
 
     echo "Starting docker-ros container"
-    SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    GET_COMPLETION_PATH=/usr/local/share/docker_ros/get_completions
+    if [ ! -f $GET_COMPLETION_PATH ]; then
+        GET_COMPLETION_PATH=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/get_completions
+    fi
     docker run -d \
         --name docker-ros \
         --network host \
@@ -147,7 +158,7 @@ _start(){
         -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
         --privileged \
         -v /dev/bus/usb:/dev/bus/usb \
-        -v $SCRIPT_DIR/get_completions:/root/get_completions:ro \
+        -v $GET_COMPLETION_PATH:/root/get_completions:ro \
         $ROS_IMAGE \
         bash -c "while true; do sleep 1000; done" > /dev/null
 }
@@ -229,6 +240,7 @@ _distro(){
     _init
     echo "$1" > ~/.config/docker_ros/ros_distro
     _retag_base_image
+    _install_configured_packages
 }
 
 _command(){
