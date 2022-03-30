@@ -3,15 +3,19 @@
 _docker_ros_completions(){
     COMPREPLY=()
     if [ "${#COMP_WORDS[@]}" -gt "1" ]; then
-        local suggestions
         if [ "${COMP_WORDS[1]}" == '' ]; then
             COMPREPLY=($(compgen -W "<COMMAND> start stop add clear distro" -- ""))
         else
-            suggestions="$(docker-ros get_completions \'${COMP_WORDS[@]:1}\' | sed 's/\r//g' | xargs)"
-            if [ "${COMP_LINE[@]: -1}" == ' ' ]; then
-                COMPREPLY=($(compgen -W "$suggestions" -- ""))
+            # test to see if this is the first time running docker-ros
+            if [ "$(docker-ros _check)" == "true" ]; then
+                local suggestions="$(docker-ros get_completions \'${COMP_WORDS[@]:1}\' | sed 's/\r//g' | xargs)"
+                if [ "${COMP_LINE[@]: -1}" == ' ' ]; then
+                    COMPREPLY=($(compgen -W "$suggestions" -- ""))
+                else
+                    COMPREPLY=($(compgen -W "$suggestions" -- ${COMP_WORDS[-1]}))
+                fi
             else
-                COMPREPLY=($(compgen -W "$suggestions" -- ${COMP_WORDS[-1]}))
+                echo "Command completion will not work because this is the first time running docker-ros! Run 'docker-ros start' first and try again"
             fi
         fi
     fi

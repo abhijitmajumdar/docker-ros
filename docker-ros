@@ -270,6 +270,13 @@ _command(){
     elif [ "$1" == "distro" ]; then
         _distro $2
         exit 0
+    elif [ "$COMMAND" == "_check" ]; then
+        if _ros_image_nonexistant; then
+            echo "false"
+            exit 1
+        fi
+        echo "true"
+        exit 0
     fi
 
     # If user only passes (ros or other) commands, launch container if not already running
