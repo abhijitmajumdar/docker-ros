@@ -139,6 +139,7 @@ _start(){
     fi
 
     echo "Starting docker-ros container"
+    SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
     docker run -d \
         --name docker-ros \
         --network host \
@@ -146,6 +147,7 @@ _start(){
         -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
         --privileged \
         -v /dev/bus/usb:/dev/bus/usb \
+        -v $SCRIPT_DIR/get_completions:/root/get_completions:ro \
         $ROS_IMAGE \
         bash -c "while true; do sleep 1000; done" > /dev/null
 }
@@ -270,7 +272,7 @@ _command(){
         -e ROS_DISTRO \
         -e COMMAND \
         docker-ros \
-        bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && $COMMAND"
+        bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && source /root/get_completions && $COMMAND"
     xhost -local:root > /dev/null
 }
 
