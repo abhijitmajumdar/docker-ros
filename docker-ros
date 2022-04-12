@@ -8,7 +8,7 @@ Usage:
     
     Help:
 
-        docker-ros
+        docker-ros --help
     
     Execution commands:
 
@@ -16,11 +16,11 @@ Usage:
 
     Special commands:
 
-        docker-ros start
-        docker-ros stop
-        docker-ros add PKGA <PKGB> ...
-        docker-ros clear
-        docker-ros distro <DISTRO>
+        docker-ros --start
+        docker-ros --stop
+        docker-ros --add PKGA <PKGB> ...
+        docker-ros --clear
+        docker-ros --distro <DISTRO>
 
     Completion:
 
@@ -53,30 +53,30 @@ Examples:
     start the docker-ros container (this is automatically done when running any other command, does not need to be
     called explicitly)
         
-        docker-ros start
+        docker-ros --start
     
     stop the docker-ros container, this can be done to stop and remove the container at any point
     
-        docker-ros stop
+        docker-ros --stop
 
     add (ros or other from apt sources) package(s) to the image
         
-        docker-ros add ros-noetic-swri-console ros-noetic-realsense2-camera nano
+        docker-ros --add ros-noetic-swri-console ros-noetic-realsense2-camera nano
 
     lanuch usb based camera driver (connect a realsense camera over USB to system for this example)
     
-        docker-ros add ros-noetic-realsense2-camera
+        docker-ros --add ros-noetic-realsense2-camera
         docker-ros roslaunch realsense2_camera rs_camera.launch
         docker-ros rosrun rviz rviz
 
     switch ros distro between noetic, melodic or kinetic. NOTE: this clears all packages installed, you will need to
     rerun docker-ros add <PKGS> to add them after this step
     
-        docker-ros distro melodic
+        docker-ros --distro melodic
 
     Clear all configurations
     
-        docker-ros clear
+        docker-ros --clear
 "
 
 DEFAULT_ROS_DISTRO="noetic"
@@ -254,23 +254,26 @@ _command(){
     fi
     
     # Explicit commands
-    if [ "$COMMAND" == "start" ]; then
+    if [ "$COMMAND" == "--help" ]; then
+        printf '%s' "$HELP"
+        exit 1
+    elif [ "$COMMAND" == "--start" ]; then
         _start
         exit 0
-    elif [ "$COMMAND" == "stop" ]; then
+    elif [ "$COMMAND" == "--stop" ]; then
         _stop
         exit 0
-    elif [ "$#" -ge 1 ] && [ "$1" == "add" ]; then
+    elif [ "$#" -ge 1 ] && [ "$1" == "--add" ]; then
         shift
         _add $@
         exit 0
-    elif [ "$COMMAND" == "clear" ]; then
+    elif [ "$COMMAND" == "--clear" ]; then
         _clear
         exit 0
-    elif [ "$1" == "distro" ]; then
+    elif [ "$1" == "--distro" ]; then
         _distro $2
         exit 0
-    elif [ "$COMMAND" == "_check" ]; then
+    elif [ "$COMMAND" == "--check" ]; then
         if _ros_image_nonexistant; then
             echo "false"
             exit 1

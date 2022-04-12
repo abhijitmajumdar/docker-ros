@@ -14,7 +14,7 @@
 **NOTE**: Once installation is done, resource the current shell (run `source ~/.bashrc`) OR open a new terminal for complete docker-ros functionality
 
 ## Use
-`docker-ros` for help
+`docker-ros --help` for help
 
 ## Uninstall
 `sudo apt remove docker-ros-deb`

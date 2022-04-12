@@ -3,11 +3,11 @@
 _docker_ros_completions(){
     COMPREPLY=()
     if [ "${#COMP_WORDS[@]}" -gt "1" ]; then
-        if [ "${COMP_WORDS[1]}" == '' ]; then
-            COMPREPLY=($(compgen -W "<COMMAND> start stop add clear distro" -- ""))
+        if [ "${COMP_WORDS[1]}" == '' ] || [ "${COMP_WORDS[1]:0:1}" == '-' ]; then
+            COMPREPLY=($(compgen -W "<COMMAND> --start --stop --add --clear --distro --help" -- "${COMP_WORDS[-1]}"))
         else
             # test to see if this is the first time running docker-ros
-            if [ "$(docker-ros _check)" == "true" ]; then
+            if [ "$(docker-ros --check)" == "true" ]; then
                 local suggestions="$(docker-ros get_completions \'${COMP_WORDS[@]:1}\' | sed 's/\r//g' | xargs)"
                 if [ "${COMP_LINE[@]: -1}" == ' ' ]; then
                     COMPREPLY=($(compgen -W "$suggestions" -- ""))

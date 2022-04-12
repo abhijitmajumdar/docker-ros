@@ -19,12 +19,12 @@ echo -e "Description: ROS over docker" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/c
 
 # The post install script
 echo '#!/bin/bash' > ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
-echo '/usr/local/bin/docker-ros start' >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
+echo '/usr/local/bin/docker-ros --start' >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
 chmod +x ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
 
 # The pre uninstall script
 echo '#!/bin/bash' > ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
-echo '/usr/local/bin/docker-ros clear' >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
+echo '/usr/local/bin/docker-ros --clear' >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
 chmod +x ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
 
 # place the exectuable
