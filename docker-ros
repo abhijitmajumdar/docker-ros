@@ -119,6 +119,18 @@ _get_packages(){
     cat ~/.config/docker_ros/packages
 }
 
+_ros_bash_msg_srv_completion_fix(){
+    echo "Adding fix for ros msg and ros srv completion"
+    local IMAGE=$ROS_IMAGE
+    local COMMAND="sed -i 's/rosmsg-proto/rosmsg-proto -f 1/g' \$(find /opt/ros -name rosbash -type f)"
+    docker run \
+        --name docker-ros \
+        $IMAGE \
+        bash -c "$COMMAND"
+    docker commit docker-ros $IMAGE
+    docker rm docker-ros
+}
+
 _retag_base_image(){
     docker pull $(_get_base_image)
     docker tag $(_get_base_image) $ROS_IMAGE
@@ -144,6 +156,7 @@ _start(){
     if _ros_image_nonexistant; then
         _retag_base_image
         _install_configured_packages
+        _ros_bash_msg_srv_completion_fix
     fi
 
     echo "Starting docker-ros container"
@@ -210,12 +223,15 @@ _add(){
     
     if [ -z "$PKGS" ]; then
         _retag_base_image
+        _ros_bash_msg_srv_completion_fix
         exit 0
     fi
 
     echo "$PKGS" > ~/.config/docker_ros/packages
 
     _install_configured_packages
+
+    _ros_bash_msg_srv_completion_fix
 
     _start
 }

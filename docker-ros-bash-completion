@@ -8,8 +8,10 @@ _docker_ros_completions(){
         else
             # test to see if this is the first time running docker-ros
             if [ "$(docker-ros --check)" == "true" ]; then
-                local suggestions="$(docker-ros get_completions \'${COMP_WORDS[@]:1}\' | sed 's/\r//g' | xargs)"
-                if [ "${COMP_LINE[@]: -1}" == ' ' ]; then
+                local suggestions="$(docker-ros get_completions \'${COMP_WORDS[@]:1}\' | sed 's/\r//g' | sed 's|\"|\\\"|g' | sed -z 's|\n| |g')"
+                if [[ "$suggestions" == *"\""*"\""* ]]; then
+                    COMPREPLY=("$(printf '%s' "$suggestions")")
+                elif [ "${COMP_LINE[@]: -1}" == ' ' ]; then
                     COMPREPLY=($(compgen -W "$suggestions" -- ""))
                 else
                     COMPREPLY=($(compgen -W "$suggestions" -- ${COMP_WORDS[-1]}))
