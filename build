@@ -1,46 +1,50 @@
 #!/usr/bin/env bash
 
-PACKAGE_NAME=docker-ros-deb
+PACKAGE_NAME=docker-ros
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+BUILD_DIR=$(mktemp -d)
+DEB_PACKAGE_DIR=${BUILD_DIR}/${PACKAGE_NAME}
+DEB_PACKAGE=${SCRIPT_DIR}/${PACKAGE_NAME}.deb
 
-# create (clean) a base directory
-rm -rf ${SCRIPT_DIR}/${PACKAGE_NAME}
-mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN
-
-# configure the control file
-echo -e "Package: ${PACKAGE_NAME}" > ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Version: 1.0" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Depends: docker-ce, bash-completion" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Section: custom" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Priority: optional" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Architecture: all" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Maintainer: Abhijit Majumdar" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-echo -e "Description: ROS over docker" >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/control
-
-# The post install script
-echo '#!/bin/bash' > ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
-echo '/usr/local/bin/docker-ros --start' >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
-chmod +x ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/postinst
-
-# The pre uninstall script
-echo '#!/bin/bash' > ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
-echo '/usr/local/bin/docker-ros --clear' >> ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
-chmod +x ${SCRIPT_DIR}/${PACKAGE_NAME}/DEBIAN/prerm
+# create a base directory
+mkdir -p ${DEB_PACKAGE_DIR}
 
 # place the exectuable
-mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/bin/
-cp ${SCRIPT_DIR}/docker-ros ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/bin/
+mkdir -p ${DEB_PACKAGE_DIR}/usr/local/bin/
+cp ${SCRIPT_DIR}/docker-ros ${DEB_PACKAGE_DIR}/usr/local/bin/
 
 # place the runtime files
-mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/share/docker_ros
-cp ${SCRIPT_DIR}/get_completions ${SCRIPT_DIR}/${PACKAGE_NAME}/usr/local/share/docker_ros/
+mkdir -p ${DEB_PACKAGE_DIR}/usr/local/share/docker_ros
+cp ${SCRIPT_DIR}/get_completions ${DEB_PACKAGE_DIR}/usr/local/share/docker_ros/
 
 # place the bash completion script to appropriate location
-mkdir -p ${SCRIPT_DIR}/${PACKAGE_NAME}/etc/bash_completion.d/
-cp ${SCRIPT_DIR}/docker-ros-bash-completion ${SCRIPT_DIR}/${PACKAGE_NAME}/etc/bash_completion.d/
+mkdir -p ${DEB_PACKAGE_DIR}/etc/bash_completion.d/
+cp ${SCRIPT_DIR}/docker-ros-bash-completion ${DEB_PACKAGE_DIR}/etc/bash_completion.d/
+
+mkdir -p ${DEB_PACKAGE_DIR}/DEBIAN
+
+# configure the control file
+echo -e "Package: ${PACKAGE_NAME}" > ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Version: 0.0" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Depends: docker-ce, bash-completion" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Section: custom" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Priority: optional" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Architecture: all" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Maintainer: Abhijit Majumdar" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+echo -e "Description: ROS over docker" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
+
+# The post install script
+echo '#!/bin/bash' > ${DEB_PACKAGE_DIR}/DEBIAN/postinst
+echo '/usr/local/bin/docker-ros --start' >> ${DEB_PACKAGE_DIR}/DEBIAN/postinst
+chmod +x ${DEB_PACKAGE_DIR}/DEBIAN/postinst
+
+# The pre uninstall script
+echo '#!/bin/bash' > ${DEB_PACKAGE_DIR}/DEBIAN/prerm
+echo '/usr/local/bin/docker-ros --clear' >> ${DEB_PACKAGE_DIR}/DEBIAN/prerm
+chmod +x ${DEB_PACKAGE_DIR}/DEBIAN/prerm
 
 # build deb
-dpkg-deb --build ${PACKAGE_NAME}
+dpkg-deb --build ${DEB_PACKAGE_DIR} ${DEB_PACKAGE}
 
-# clean build
-rm -rf ${SCRIPT_DIR}/${PACKAGE_NAME}
+# clean build cache
+rm -rf ${BUILD_DIR}
