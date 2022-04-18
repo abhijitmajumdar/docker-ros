@@ -306,7 +306,7 @@ _command(){
 
     # Execute the command in the container, with an interactive session to enable user keypresses
     ROS_DISTRO=$(_get_ros_distro)
-    xhost +local:root > /dev/null
+    xhost +local:root > /dev/null 2>&1
     docker exec -it \
         -e QT_X11_NO_MITSHM=1 \
         -e DISPLAY \
@@ -314,7 +314,7 @@ _command(){
         -e COMMAND \
         docker-ros \
         bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && source /root/get_completions && $COMMAND"
-    xhost -local:root > /dev/null
+    xhost -local:root > /dev/null 2>&1
 }
 
 _command "$@"
