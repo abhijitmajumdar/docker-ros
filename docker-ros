@@ -21,6 +21,7 @@ Usage:
         docker-ros --add PKGA <PKGB> ...
         docker-ros --clear
         docker-ros --distro <DISTRO>
+        docker-ros --mount
 
     Completion:
 
@@ -74,6 +75,16 @@ Examples:
     
         docker-ros --distro melodic
 
+    mount a directory (maybe workspace) inside the container to run docker-ros instructions on it
+
+        docker-ros --add python3-catkin-tools
+        mkdir -p ~/catkin_ws/src
+        cd ~/catkin_ws
+        docker-ros --mount
+        docker-ros catkin init
+        docker-ros catkin build
+        ls
+
     Clear all configurations
     
         docker-ros --clear
@@ -99,6 +110,10 @@ _init(){
     if [ ! -f ~/.config/docker_ros/packages ]; then
         echo "$DEFAULT_PKGS" > ~/.config/docker_ros/packages
     fi
+
+    if [ ! -f ~/.config/docker_ros/mounts ]; then
+        touch ~/.config/docker_ros/mounts
+    fi
 }
 
 _deinit(){
@@ -123,6 +138,21 @@ _ros_bash_msg_srv_completion_fix(){
     echo "Adding fix for ros msg and ros srv completion"
     local IMAGE=$ROS_IMAGE
     local COMMAND="sed -i 's/rosmsg-proto/rosmsg-proto -f 1/g' \$(find /opt/ros -name rosbash -type f)"
+    docker run \
+        --name docker-ros \
+        $IMAGE \
+        bash -c "$COMMAND"
+    docker commit docker-ros $IMAGE
+    docker rm docker-ros
+}
+
+_add_user(){
+    echo "Adding local user to container"
+    local IMAGE=$ROS_IMAGE
+    local user_gid=$(id -g `logname`)
+    local user_uid=$(id -u `logname`)
+    local user_name=$(logname)
+    local COMMAND="groupadd -g ${user_gid} ${user_name} && useradd --uid ${user_uid} --gid ${user_gid} -m ${user_name} -s /bin/bash && passwd -d ${user_name} && usermod -aG sudo ${user_name}"
     docker run \
         --name docker-ros \
         $IMAGE \
@@ -157,13 +187,25 @@ _start(){
         _retag_base_image
         _install_configured_packages
         _ros_bash_msg_srv_completion_fix
+        _add_user
     fi
 
     echo "Starting docker-ros container"
+
     GET_COMPLETION_PATH=/usr/local/share/docker_ros/get_completions
     if [ ! -f $GET_COMPLETION_PATH ]; then
         GET_COMPLETION_PATH=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/get_completions
     fi
+
+    mount_var=""
+    while read mount
+    do
+        if [ -z "$mount" ]; then
+            continue
+        fi
+        mount_var="-v $mount:$mount "${mount_var}
+    done <<< $(_get_mount_list)
+
     docker run -d \
         --name docker-ros \
         --network host \
@@ -171,7 +213,8 @@ _start(){
         -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
         --privileged \
         -v /dev/bus/usb:/dev/bus/usb \
-        -v $GET_COMPLETION_PATH:/root/get_completions:ro \
+        -v $GET_COMPLETION_PATH:/usr/local/bin/get_completions:ro \
+        $mount_var \
         $ROS_IMAGE \
         bash -c "while true; do sleep 1000; done" > /dev/null
 }
@@ -224,6 +267,7 @@ _add(){
     if [ -z "$PKGS" ]; then
         _retag_base_image
         _ros_bash_msg_srv_completion_fix
+        _add_user
         exit 0
     fi
 
@@ -232,6 +276,8 @@ _add(){
     _install_configured_packages
 
     _ros_bash_msg_srv_completion_fix
+
+    _add_user
 
     _start
 }
@@ -260,6 +306,58 @@ _distro(){
     echo "$1" > ~/.config/docker_ros/ros_distro
     _retag_base_image
     _install_configured_packages
+    _ros_bash_msg_srv_completion_fix
+    _add_user
+}
+
+_get_mount_list(){
+    cat ~/.config/docker_ros/mounts
+}
+
+_mount(){
+    local cwd=$(realpath `pwd`)
+
+    # check if current dir is a sub dir of existing mount points
+    while read mount
+    do
+        if [ -z "$mount" ]; then
+            continue
+        fi
+        if [[ "$cwd" = "$mount"* ]]; then
+            echo "Already mounted as $mount"
+            return
+        fi
+    done <<< $(_get_mount_list)
+
+    # check if any of the mount points are subdirs of the current dir, if so replace those with this parent dir as mount
+    # point
+    overriden_mounts=""
+    cwd_added=false
+    while read mount
+    do
+        if [[ "$mount" = "$cwd"* ]]; then
+            echo "configured mount point ($mount) is subdir for current dir ($cwd), replacing it..."
+            if [ "$cwd_added" == false ]; then
+                overriden_mounts="${cwd}\n${overriden_mounts}"
+                cwd_added=true
+            fi
+        else
+            overriden_mounts="${mount}\n${overriden_mounts}"
+        fi
+    done <<< $(_get_mount_list)
+
+    # if current dir was not parent to any of the existing mount points, then add it as a new dir
+    if [ "$cwd_added" == false ]; then
+        overriden_mounts="${cwd}\n${overriden_mounts}"
+    fi
+
+    # finally rewrite the mount points
+    echo -e $overriden_mounts > ~/.config/docker_ros/mounts
+
+    # if we reach this point, we must have added/modified some mount points, so restart
+    echo "Mounting dir $cwd"
+    _stop
+    _start
 }
 
 _command(){
@@ -292,6 +390,9 @@ _command(){
     elif [ "$1" == "--distro" ]; then
         _distro $2
         exit 0
+    elif [ "$1" == "--mount" ]; then
+        _mount
+        exit 0
     elif [ "$COMMAND" == "--check" ]; then
         if _ros_image_nonexistant; then
             echo "false"
@@ -304,16 +405,22 @@ _command(){
     # If user only passes (ros or other) commands, launch container if not already running
     _start
 
-    # Execute the command in the container, with an interactive session to enable user keypresses
     ROS_DISTRO=$(_get_ros_distro)
+    cwd=$(realpath `pwd`)
+
+    COMMAND="if [ -d $cwd ]; then cd $cwd; fi && "$COMMAND
+    COMMAND="source /usr/local/bin/get_completions && "$COMMAND
+    COMMAND="source /opt/ros/$ROS_DISTRO/setup.bash && "$COMMAND
+
+    # Execute the command in the container, with an interactive session to enable user keypresses
     xhost +local:root > /dev/null 2>&1
     docker exec -it \
         -e QT_X11_NO_MITSHM=1 \
         -e DISPLAY \
-        -e ROS_DISTRO \
         -e COMMAND \
+        --user $USER \
         docker-ros \
-        bash -c "source /opt/ros/$ROS_DISTRO/setup.bash && source /root/get_completions && $COMMAND"
+        bash -c "$COMMAND"
     xhost -local:root > /dev/null 2>&1
 }
 
