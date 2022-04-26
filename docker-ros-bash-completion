@@ -4,7 +4,7 @@ _docker_ros_completions(){
     COMPREPLY=()
     if [ "${#COMP_WORDS[@]}" -gt "1" ]; then
         if [ "${COMP_WORDS[1]}" == '' ] || [ "${COMP_WORDS[1]:0:1}" == '-' ]; then
-            COMPREPLY=($(compgen -W "<COMMAND> --start --stop --add --clear --distro --mount --help" -- "${COMP_WORDS[-1]}"))
+            COMPREPLY=($(compgen -W "<COMMAND> --start --stop --add --clear --distro --mount --unmount --unmount-all --help" -- "${COMP_WORDS[-1]}"))
         else
             # test to see if this is the first time running docker-ros
             if [ "$(docker-ros --check)" == "true" ]; then

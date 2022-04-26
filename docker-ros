@@ -360,6 +360,49 @@ _mount(){
     _start
 }
 
+_unmount(){
+    local cwd=$(realpath `pwd`)
+
+    # check if current dir is a sub dir of existing mount points or a mount point itself
+    local overriden_mounts=""
+    local mounted=false
+    while read mount
+    do
+        if [ -z "$mount" ]; then
+            continue
+        fi
+        if [[ "$cwd" = "$mount" ]]; then
+            mounted=true
+        elif [[ "$cwd" = "$mount"* ]]; then
+            echo "Current directory ($cwd) is not mounted but parent directory ($mount) is, try unmounting parent directory instead, not changing anything"
+            return
+        else
+            overriden_mounts="${mount}\n${overriden_mounts}"
+        fi
+    done <<< $(_get_mount_list)
+
+    if [ "$mounted" == false ]; then
+        echo "Current directory is not a mount point, doing nothing"
+        return
+    fi
+
+    # finally rewrite the mount points
+    echo -e $overriden_mounts > ~/.config/docker_ros/mounts
+
+    # if we reach this point, we must have added/modified some mount points, so restart
+    echo "Unmounting dir $cwd"
+    _stop
+    _start
+}
+
+_unmount_all(){
+    echo "" > ~/.config/docker_ros/mounts
+
+    echo "Unmounting all directories"
+    _stop
+    _start
+}
+
 _command(){
     _init
 
@@ -392,6 +435,12 @@ _command(){
         exit 0
     elif [ "$1" == "--mount" ]; then
         _mount
+        exit 0
+    elif [ "$1" == "--unmount" ]; then
+        _unmount
+        exit 0
+    elif [ "$1" == "--unmount-all" ]; then
+        _unmount_all
         exit 0
     elif [ "$COMMAND" == "--check" ]; then
         if _ros_image_nonexistant; then
