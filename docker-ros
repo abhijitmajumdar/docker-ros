@@ -91,7 +91,7 @@ Examples:
 "
 
 DEFAULT_ROS_DISTRO="noetic"
-DEFAULT_PKGS="bash-completion nano less"
+DEFAULT_PKGS="bash-completion less nano"
 ROS_IMAGE="docker-ros:custom"
 
 _configure_loc(){
@@ -253,32 +253,32 @@ _install_configured_packages(){
 }
 
 _add(){
-    if _running; then
-        _stop
-    fi
-
     if [ -z $1 ]; then
         echo "must specify atleast 1 package to be added to the image"
         exit 1
     fi
 
     PKGS=`echo "$(_get_packages) $@" | xargs -n1 | sort -u | xargs`
-    
-    if [ -z "$PKGS" ]; then
-        _retag_base_image
-        _ros_bash_msg_srv_completion_fix
-        _add_user
+
+    if [ "$PKGS" == "$(_get_packages)" ]; then
+        echo "package(s) specified are already installed. Specified packages -> \'$@\', installed packages -> \'$(_get_packages)\'"
         exit 0
     fi
 
+    # First check if the specified package are available from the package manager
+    for pkg in $@;
+    do
+        if [[ "$(docker-ros apt-cache policy $pkg)" == *"Unable to locate package"* ]]; then
+            echo "Package $pkg not found in sources, you may need to add apt-sources first"
+            exit 1
+        fi
+    done
+
+    # Finally install the packages and redefine the base image
     echo "$PKGS" > ~/.config/docker_ros/packages
-
     _install_configured_packages
-
     _ros_bash_msg_srv_completion_fix
-
     _add_user
-
     _start
 }
 
