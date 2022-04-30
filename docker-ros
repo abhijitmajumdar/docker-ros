@@ -91,7 +91,8 @@ Examples:
 "
 
 DEFAULT_ROS_DISTRO="noetic"
-DEFAULT_PKGS="bash-completion less nano"
+DEFAULT_PKGS="bash-completion less nano python3-pip"
+DEFAULT_PIP_PKGS=""
 ROS_IMAGE="docker-ros:custom"
 
 _configure_loc(){
@@ -107,8 +108,12 @@ _init(){
         echo "$DEFAULT_ROS_DISTRO" > ~/.config/docker_ros/ros_distro
     fi
 
-    if [ ! -f ~/.config/docker_ros/packages ]; then
-        echo "$DEFAULT_PKGS" > ~/.config/docker_ros/packages
+    if [ ! -f ~/.config/docker_ros/packages_apt ]; then
+        echo "$DEFAULT_PKGS" > ~/.config/docker_ros/packages_apt
+    fi
+
+    if [ ! -f ~/.config/docker_ros/packages_pip ]; then
+        echo "$DEFAULT_PIP_PKGS" > ~/.config/docker_ros/packages_pip
     fi
 
     if [ ! -f ~/.config/docker_ros/mounts ]; then
@@ -130,8 +135,12 @@ _get_base_image(){
     echo "osrf/ros:$(_get_ros_distro)-desktop-full"
 }
 
-_get_packages(){
-    cat ~/.config/docker_ros/packages
+_get_apt_packages(){
+    cat ~/.config/docker_ros/packages_apt
+}
+
+_get_pip_packages(){
+    cat ~/.config/docker_ros/packages_pip
 }
 
 _ros_bash_msg_srv_completion_fix(){
@@ -236,34 +245,66 @@ _install_configured_packages(){
 
     BASE_IMAGE="$(_get_base_image)"
     FINAL_IMAGE="$ROS_IMAGE"
-    PKGS="$(_get_packages)"
+    APT_PKGS="$(_get_apt_packages)"
+    PIP_PKGS="$(_get_pip_packages)"
 
-    if [ -z "$PKGS" ]; then
+    if [ -z "$APT_PKGS" ] && [ -z "$PIP_PKGS"]; then
         return
     fi
 
-    echo "installing following packages to $BASE_IMAGE to form $FINAL_IMAGE: $PKGS"
-    docker run \
-        --name docker-ros \
-        -e PKGS \
-        $BASE_IMAGE \
-        bash -c "apt update && apt install -y $PKGS && rm -rf /var/lib/apt/lists/*"
+    echo "installing following packages to $BASE_IMAGE to form $FINAL_IMAGE: $APT_PKGS $PIP_PKGS"
+    COMMAND=""
+    if [ ! -z "$APT_PKGS" ]; then
+        COMMAND+="apt update && apt install -y $APT_PKGS && rm -rf /var/lib/apt/lists/*"
+    fi
+    if [ ! -z "$PIP_PKGS" ]; then
+        if [ ! -z $COMMAND ]; then
+            COMMAND+=" && "
+        fi
+        COMMAND+="pip install $PIP_PKGS && ( pip cache purge 2>/dev/null || rm -rf ~/.cache/pip )"
+    fi
+    docker run --name docker-ros $BASE_IMAGE bash -c "$COMMAND"
     docker commit docker-ros $FINAL_IMAGE
     docker rm docker-ros
 }
 
-_add(){
-    if [ -z $1 ]; then
-        echo "must specify atleast 1 package to be added to the image"
-        exit 1
-    fi
+_add_pip(){
+    PKGS=`echo "$(_get_pip_packages) $@" | xargs -n1 | sort -u | xargs`
 
-    PKGS=`echo "$(_get_packages) $@" | xargs -n1 | sort -u | xargs`
-
-    if [ "$PKGS" == "$(_get_packages)" ]; then
-        echo "package(s) specified are already installed. Specified packages -> \'$@\', installed packages -> \'$(_get_packages)\'"
+    if [ "$PKGS" == "$(_get_pip_packages)" ]; then
+        echo "package(s) specified are already installed. Specified packages -> ($@), installed packages -> ($(_get_pip_packages))"
         exit 0
     fi
+
+    # First check if the specified package are available from the package manager
+    for pkg in $@;
+    do
+        # TODO check what error message pip returns if the package is not found
+        # TODO Since pip checks online, make sure an active connection exists, otherwise warn user
+        if [[ "$(docker-ros pip search $pkg)" == *"Unable to locate package"* ]]; then
+            echo "Package $pkg not found in pypi, a custom source may be specified with a -f flag or a custom index using the -i flag"
+            exit 1
+        fi
+    done
+
+    # Finally install the packages and redefine the base image
+    echo "$PKGS" > ~/.config/docker_ros/packages_pip
+    _install_configured_packages
+    _ros_bash_msg_srv_completion_fix
+    _add_user
+    _start
+}
+
+_add_apt(){
+    PKGS=`echo "$(_get_apt_packages) $@" | xargs -n1 | sort -u | xargs`
+
+    if [ "$PKGS" == "$(_get_apt_packages)" ]; then
+        echo "package(s) specified are already installed. Specified packages -> ($@), installed packages -> ($(_get_apt_packages))"
+        exit 0
+    fi
+
+    # Update apt sources (needed to be able to do apt-cache policy)
+    docker-ros sudo apt update
 
     # First check if the specified package are available from the package manager
     for pkg in $@;
@@ -275,11 +316,28 @@ _add(){
     done
 
     # Finally install the packages and redefine the base image
-    echo "$PKGS" > ~/.config/docker_ros/packages
+    echo "$PKGS" > ~/.config/docker_ros/packages_apt
     _install_configured_packages
     _ros_bash_msg_srv_completion_fix
     _add_user
     _start
+}
+
+_add(){
+    if [[ "$1" == "" || ("$1" != "apt" && "$1" != "pip") ]]; then
+        echo "must specify package manager to use <apt/pip>"
+        exit 1
+    fi
+
+    if [ -z $2 ]; then
+        echo "must specify atleast 1 package to be added to the image"
+        exit 1
+    fi
+
+    package_manager="$1"
+    shift
+
+    _add_${package_manager} $@
 }
 
 _clear(){
