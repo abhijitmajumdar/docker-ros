@@ -261,7 +261,7 @@ _install_configured_packages(){
         if [ ! -z $COMMAND ]; then
             COMMAND+=" && "
         fi
-        COMMAND+="pip install $PIP_PKGS && ( pip cache purge 2>/dev/null || rm -rf ~/.cache/pip )"
+        COMMAND+="pip install $PIP_PKGS && ( pip cache purge 2>/dev/null || rm -rf /root/.cache/pip )"
     fi
     docker run --name docker-ros $BASE_IMAGE bash -c "$COMMAND"
     docker commit docker-ros $FINAL_IMAGE

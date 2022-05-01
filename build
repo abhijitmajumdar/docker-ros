@@ -35,12 +35,12 @@ echo -e "Description: ROS over docker" >> ${DEB_PACKAGE_DIR}/DEBIAN/control
 
 # The post install script
 echo '#!/bin/bash' > ${DEB_PACKAGE_DIR}/DEBIAN/postinst
-echo '/usr/local/bin/docker-ros --start' >> ${DEB_PACKAGE_DIR}/DEBIAN/postinst
+echo 'su `logname` -c "/usr/local/bin/docker-ros --start"' >> ${DEB_PACKAGE_DIR}/DEBIAN/postinst
 chmod +x ${DEB_PACKAGE_DIR}/DEBIAN/postinst
 
 # The pre uninstall script
 echo '#!/bin/bash' > ${DEB_PACKAGE_DIR}/DEBIAN/prerm
-echo '/usr/local/bin/docker-ros --clear' >> ${DEB_PACKAGE_DIR}/DEBIAN/prerm
+echo 'su `logname` -c "/usr/local/bin/docker-ros --clear"' >> ${DEB_PACKAGE_DIR}/DEBIAN/prerm
 chmod +x ${DEB_PACKAGE_DIR}/DEBIAN/prerm
 
 # build deb
