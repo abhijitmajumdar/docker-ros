@@ -91,7 +91,7 @@ Examples:
 "
 
 DEFAULT_ROS_DISTRO="noetic"
-DEFAULT_PKGS="bash-completion less nano python3-pip"
+DEFAULT_PKGS="bash-completion less nano python3-pip wget"
 DEFAULT_PIP_PKGS=""
 ROS_IMAGE="docker-ros:custom"
 
@@ -268,6 +268,19 @@ _install_configured_packages(){
     docker rm docker-ros
 }
 
+_verify_internet_connectivity(){
+    local valid=$(docker-ros 'if wget -q --spider http://google.com; then echo -n true; else echo -n false; fi' | sed 's/\r//g')
+    if [[ "$valid" == "true" ]]; then
+        return
+    elif [[ "$valid" == "false" ]]; then
+        echo "no internet connection found, cannot install packages!"
+        exit 1
+    else
+        echo "something went wrong while checking intenet connection: $valid"
+        exit 1
+    fi
+}
+
 _add_pip(){
     PKGS=`echo "$(_get_pip_packages) $@" | xargs -n1 | sort -u | xargs`
 
@@ -276,11 +289,12 @@ _add_pip(){
         exit 0
     fi
 
+    _verify_internet_connectivity
+
     # First check if the specified package are available from the package manager
     for pkg in $@;
     do
         # TODO check what error message pip returns if the package is not found
-        # TODO Since pip checks online, make sure an active connection exists, otherwise warn user
         if [[ "$(docker-ros pip search $pkg)" == *"Unable to locate package"* ]]; then
             echo "Package $pkg not found in pypi, a custom source may be specified with a -f flag or a custom index using the -i flag"
             exit 1
@@ -302,6 +316,8 @@ _add_apt(){
         echo "package(s) specified are already installed. Specified packages -> ($@), installed packages -> ($(_get_apt_packages))"
         exit 0
     fi
+
+    _verify_internet_connectivity
 
     # Update apt sources (needed to be able to do apt-cache policy)
     docker-ros sudo apt update
