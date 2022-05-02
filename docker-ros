@@ -544,7 +544,9 @@ _command(){
         --user $USER \
         docker-ros \
         bash -c "$COMMAND"
+    local return_code=$?
     xhost -local:root > /dev/null 2>&1
+    exit $return_code
 }
 
 _command "$@"
